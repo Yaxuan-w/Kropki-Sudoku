@@ -1,5 +1,6 @@
 from copy import deepcopy
 from constraints import *
+import counter
 
 def check_kropki(dot_relations, domains, changed):
     """
@@ -176,7 +177,6 @@ def backtrack(kropki, relations, domains, row_constraints, col_constraints, box_
     Before trying a value, use the _is_valid function to check whether the current assignment satisfies all constraints.
     If an assignment results in a constraint violation, backtrack and try other possible values.
     """
-    global backtrack_count
 
     # Get next unassigned variable using MRV and DH
     next_cell = select_unassigned_variable(kropki, domains, relations)
@@ -203,6 +203,6 @@ def backtrack(kropki, relations, domains, row_constraints, col_constraints, box_
 
             kropki[r][c] = 0
             remove_value(r, c, k, row_constraints, col_constraints, box_constraints)
-            backtrack_count += 1
+            counter.BACKTRACK_COUNTER += 1
 
     return False

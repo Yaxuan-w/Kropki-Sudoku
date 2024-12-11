@@ -1,4 +1,5 @@
 from backtrack_alg import *
+import counter
 import argparse, time
 
 def extract_input(args):
@@ -34,7 +35,7 @@ def run_cps(sudoku_board, horizontal_dots, vertical_dots):
     else:
         print("Invalid sudoku - constraints cannot be satisfied")
 
-    print(f"Backtrack steps: {backtrack_count}")
+    print(f"Backtrack steps: {counter.BACKTRACK_COUNTER}")
     print(f"Time taken: {end_time - start_time:.6f} seconds")
 
     return sudoku_board
@@ -67,8 +68,6 @@ def main():
 
     args = parser.parse_args()
 
-    global backtrack_count
-    backtrack_count = 0
 
     sudoku_board, horizontal_dots, vertical_dots = extract_input(args)
 
