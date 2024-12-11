@@ -1,62 +1,15 @@
 from copy import deepcopy
-import time
+from constraints import *
 
-def build_dot_constraints(horizontal_dots, vertical_dots):
-    dot_relations = {}
-
-    # Horizontal -- row constraints
-    for i, row in enumerate(horizontal_dots):
-        for j, value in enumerate(row):
-            if value > 0:
-                coords = ((i, j), (i, j + 1))
-                dot_relations[coords] = value
-
-    # Vertical -- column constraints 
-    for i, row in enumerate(vertical_dots):
-        for j, value in enumerate(row):
-            if value > 0:
-                coords = ((i, j), (i+1, j))
-                dot_relations[coords] = value
-
-    return dot_relations
-
-def build_constraints(sudoku_board):
+def check_kropki(dot_relations, domains, changed):
     """
-    Initialize row, column, and box constraints based on the initial kropki board.
-    Combine row/column/box into one function to save runtime because we only need to loop one time 
-
-    - row_constraints: stores the used values for each row.
-    - col_constraints: stores the used values for each column.
-    - box_constraints: stores the used values for each 3x3 box.
-    The key of each dictionary is the row number, column number or box number, and the value is the corresponding set of used values.
+    Updates domains based on Kropki dot constraints by removing invalid values.
+    - For each pair of cells with a Kropki constraint, ensures their domains satisfy the constraint.
+    - Removes invalid values and marks changed if a domain is updated.
+    - Returns the changed flag.
     """
-    row_constraints = {r: set() for r in range(9)}
-    col_constraints = {c: set() for c in range(9)}
-    box_constraints = {(r // 3, c // 3): set() for r in range(9) for c in range(9)}
-
-    for row in range(9):
-        for col in range(9):
-            if sudoku_board[row][col] != 0:
-                value = sudoku_board[row][col]
-                row_constraints[row].add(value)
-                col_constraints[col].add(value)
-                box_constraints[(row // 3, col // 3)].add(value)
-
-    return row_constraints, col_constraints, box_constraints
-
-def assign_value(r, c, k, row_constraints, col_constraints, box_constraints):
-    row_constraints[r].add(k)
-    col_constraints[c].add(k)
-    box_constraints[(r // 3, c // 3)].add(k)
-
-def remove_value(r, c, k, row_constraints, col_constraints, box_constraints):
-    row_constraints[r].remove(k)
-    col_constraints[c].remove(k)
-    box_constraints[(r // 3, c // 3)].remove(k)
-
-def check_kropki(relations, domains, changed):
     # Handle Kropki constraints
-    for (cell1, cell2), constraint in relations.items():
+    for (cell1, cell2), constraint in dot_relations.items():
         # For each value in first cell's domain
         for v1 in list(domains[cell1]):
             valid = False
@@ -89,6 +42,11 @@ def check_kropki(relations, domains, changed):
     return changed
 
 def check_sudoku(sudoku_board, domains, changed):
+    """
+    Updates domains based on Sudoku rules (row, column, and subgrid uniqueness).
+    - For each filled cell in the board, removes its value from the domains of other cells in the same row, column, or subgrid.
+    - Marks changed if a domain is updated and returns the flag.
+    """
     # Handling filled cells
     for r in range(9):
         for c in range(9):
@@ -120,7 +78,8 @@ def check_sudoku(sudoku_board, domains, changed):
 def forward_check(sudoku_board, dot_relations, domains):
     """
     Cleans the domains based on all constraints and propagates changes.
-    Returns False if any domain becomes empty, True otherwise.
+    - Iteratively applies check_kropki and check_sudoku until no more changes occur.
+    - Returns False if any domain becomes empty, otherwise returns True.
     """
     changed = True
     while changed:
@@ -137,7 +96,12 @@ def forward_check(sudoku_board, dot_relations, domains):
     return True
 
 
-def is_valid(kropki, relations, r, c, k, row_constraints, col_constraints, box_constraints):
+def _is_valid(kropki, relations, r, c, k, row_constraints, col_constraints, box_constraints):
+    """
+    Checks whether assigning a value to a cell satisfies all constraints.
+    - Ensures value k does not violate row, column, or subgrid constraints.
+    - Validates that k satisfies Kropki dot constraints with adjacent cells.
+    """
     # Check row, column, and box constraints
     if k in row_constraints[r] or k in col_constraints[c] or k in box_constraints[(r // 3, c // 3)]:
         return False
@@ -159,10 +123,9 @@ def is_valid(kropki, relations, r, c, k, row_constraints, col_constraints, box_c
 
 def select_unassigned_variable(kropki, domains, relations):
     """
-    Implements Minimum Remaining Values (MRV) and Degree Heuristics.
-    Returns (row, col) of the unassigned variable with the smallest domain.
-    If tied, chooses the variable involved in the most constraints.
-    Returns None if all variables are assigned.
+    Use Minimum Remaining Values (MRV) and Degree Heuristics (DH) to select the next unassigned variable:
+    - Prefer the variable with the smallest domain size (MRV).
+    - If the domain sizes are the same, select the variable that participates in the most constraints (DH)
     """
     min_domain_size = float('inf')
     max_degree = -1
@@ -176,21 +139,23 @@ def select_unassigned_variable(kropki, domains, relations):
                 if domain_size < min_domain_size:
                     # Update if smaller domain found
                     min_domain_size = domain_size
-                    max_degree = count_unassigned_neighbors(kropki, r, c, relations)
+                    max_degree = _count_unassigned_neighbors(kropki, r, c, relations)
                     best_cell = (r, c)
 
                 elif domain_size == min_domain_size:
                     # Break ties with Degree Heuristics
-                    degree = count_unassigned_neighbors(kropki, r, c, relations)
+                    degree = _count_unassigned_neighbors(kropki, r, c, relations)
                     if degree > max_degree:
                         max_degree = degree
                         best_cell = (r, c)
 
     return best_cell
 
-def count_unassigned_neighbors(kropki, r, c, relations):
+def _count_unassigned_neighbors(kropki, r, c, relations):
     """
+    Helper function for select_unassigned_variable:
     Counts the number of unassigned neighbors for a cell, based on Kropki relations.
+    - Traverses Kropki constraints and counts the neighbors of cell (r, c) that are not yet assigned.
     """
     count = 0
     for (cell1, cell2) in relations:
@@ -201,11 +166,14 @@ def count_unassigned_neighbors(kropki, r, c, relations):
     return count
 
 def order_domain_values(r, c, domains):
+    """
+    Try possible values of the current variable in ascending order
+    """
     return sorted(domains[(r, c)])
 
 def backtrack(kropki, relations, domains, row_constraints, col_constraints, box_constraints):
     """
-    Before trying a value, use the is_valid function to check whether the current assignment satisfies all constraints.
+    Before trying a value, use the _is_valid function to check whether the current assignment satisfies all constraints.
     If an assignment results in a constraint violation, backtrack and try other possible values.
     """
     global backtrack_count
@@ -219,8 +187,12 @@ def backtrack(kropki, relations, domains, row_constraints, col_constraints, box_
 
     r, c = next_cell
 
+    # Selects an unassigned variable using select_unassigned_variable.
+    # Iteratively assigns a valid value from the domain, propagates constraints using forward_check, and recursively searches 
+    # for a solution.
+    # If a conflict occurs, reverts the assignment and tries another value.
     for k in order_domain_values(r, c, domains):
-        if is_valid(kropki, relations, r, c, k, row_constraints, col_constraints, box_constraints):
+        if _is_valid(kropki, relations, r, c, k, row_constraints, col_constraints, box_constraints):
             kropki[r][c] = k
             assign_value(r, c, k, row_constraints, col_constraints, box_constraints)
 
@@ -234,41 +206,3 @@ def backtrack(kropki, relations, domains, row_constraints, col_constraints, box_
             backtrack_count += 1
 
     return False
-
-def main():
-    global backtrack_count
-    backtrack_count = 0
-    
-    with open('Sample_Input.txt', 'r') as file:
-        lines = file.readlines()
-    # with open('Input3.txt', 'r') as file:
-    #     lines = file.readlines()
-
-    hard_kropki_solution = [list(map(int, line.split())) for line in lines[:9]]  # Board
-    # print(board)
-    horizontal_dots = [list(map(int, line.split())) for line in lines[10:19]]  # Horizontal
-    vertical_dots = [list(map(int, line.split())) for line in lines[20:28]]  # Vertical
-
-    hard_relations = build_dot_constraints(horizontal_dots, vertical_dots)
-    
-    domains = {(row, col): set(range(1, 10)) for row in range(9) for col in range(9)}
-
-    row_constraints, col_constraints, box_constraints = build_constraints(hard_kropki_solution)
-
-    start_time = time.time()
-    # Initial domain cleanup to reduce total searching time 
-    if forward_check(hard_kropki_solution, hard_relations, domains):
-        if backtrack(hard_kropki_solution, hard_relations, domains, row_constraints, col_constraints, box_constraints):
-            print("Solution found:")
-            end_time = time.time()
-            for row in hard_kropki_solution:
-                print(row)
-        else:
-            print("No solution found.")
-    else:
-        print("Invalid puzzle - constraints cannot be satisfied")
-
-    print(f"Backtrack steps: {backtrack_count}")
-    print(f"Time taken: {end_time - start_time:.6f} seconds")
-
-main()
