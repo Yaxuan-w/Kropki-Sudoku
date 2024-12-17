@@ -51,6 +51,7 @@ python run.py --input_file <input_file_path> --output_file <output_file_path>
 #### Arguments
 
 `--input_file`: Path to the input file containing the Kropki Sudoku puzzle.
+
 `--output_file`: Path to save the solved puzzle.
 
 ## Input Format
@@ -106,7 +107,8 @@ Example input files could be found under `input/` folder
 ## Output Format
 
 The output file will contain the solved Sudoku board:
-    - Each row is a space-separated list of integers.
+
+- Each row is a space-separated list of integers.
 
 ### Example Output File
 
